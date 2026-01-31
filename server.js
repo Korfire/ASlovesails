@@ -18,7 +18,7 @@ const upload = multer({ dest: uploadDir });
 
 // Allow your frontend (running on port 3000) to access this backend
 app.use(cors({
-  origin: 'aslovesails2026.netlify.app'
+  origin: 'https://aslovesails2026.netlify.app'
 })); 
 app.use(express.json());
 app.get('/', (req, res) => {
