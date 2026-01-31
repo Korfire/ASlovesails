@@ -166,5 +166,5 @@ app.get('/download-all', async (req, res) => {
 });
 
 // Start Server on Port 5000
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`✅ Backend Server Running on ${PORT}`));
