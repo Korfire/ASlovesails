@@ -21,6 +21,9 @@ app.use(cors({
   origin: 'aslovesails2026.netlify.app'
 })); 
 app.use(express.json());
+app.get('/', (req, res) => {
+  res.send('Wedding Server is Up and Running! 🥂');
+});
 
 // CLOUDINARY CONFIGURATION
 // Sign up at https://cloudinary.com (FREE - 25GB storage, 25GB bandwidth/month)
