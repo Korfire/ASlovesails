@@ -1,4 +1,4 @@
 node_modules/
    uploads/
    .env
-credentials.json/
+credentials.json
