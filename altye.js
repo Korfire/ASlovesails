@@ -17,8 +17,13 @@ if (!fs.existsSync(uploadDir)){
 const upload = multer({ dest: uploadDir });
 
 // Allow your frontend (running on port 3000) to access this backend
-app.use(cors()); 
+app.use(cors({
+  origin: 'https://aslovesails2026.netlify.app'
+})); 
 app.use(express.json());
+app.get('/', (req, res) => {
+  res.send('Wedding Server is Up and Running! 🥂');
+});
 
 // CLOUDINARY CONFIGURATION
 // Sign up at https://cloudinary.com (FREE - 25GB storage, 25GB bandwidth/month)
@@ -102,12 +107,21 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
 // --- ENDPOINT: DELETE PHOTO (Admin) ---
 app.delete('/photos/:id', async (req, res) => {
   try {
-    const publicId = req.params.id;
+    // FIX: Decode the URL-encoded photo ID
+    const publicId = decodeURIComponent(req.params.id);
+    
+    console.log("Attempting to delete photo with ID:", publicId);
     
     // Delete from Cloudinary
-    await cloudinary.uploader.destroy(publicId);
+    const result = await cloudinary.uploader.destroy(publicId);
     
-    res.status(200).json({ success: true, message: "Deleted successfully" });
+    console.log("Cloudinary delete result:", result);
+    
+    if (result.result === 'ok' || result.result === 'not found') {
+      res.status(200).json({ success: true, message: "Deleted successfully" });
+    } else {
+      res.status(500).json({ error: "Delete failed", details: result });
+    }
   } catch (error) {
     console.error("Error deleting file:", error);
     res.status(500).json({ error: "Delete failed", details: error.message });
@@ -155,4 +169,5 @@ app.get('/download-all', async (req, res) => {
 });
 
 // Start Server on Port 5000
-app.listen(5000, () => console.log('✅ Backend Server Running on http://localhost:5000'));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => console.log(`✅ Backend Server Running on ${PORT}`));

@@ -37,13 +37,14 @@ cloudinary.config({
 // In-memory photo database (for demo - use real DB in production)
 let photosDB = [];
 
-// --- ENDPOINT: FETCH ALL PHOTOS ---
+// --- ENDPOINT: FETCH ALL PHOTOS AND VIDEOS ---
 app.get('/photos', async (req, res) => {
   try {
-    // Fetch all photos from Cloudinary with tag 'wedding-album'
+    // Fetch all media from Cloudinary with tag 'wedding-album'
     const result = await cloudinary.api.resources_by_tag('wedding-album', {
       max_results: 500,
-      context: true // Get custom context (guest name)
+      context: true, // Get custom context (guest name)
+      resource_type: 'auto' // Get both images and videos
     });
 
     // Map Cloudinary resources to our format
@@ -54,7 +55,8 @@ app.get('/photos', async (req, res) => {
         id: resource.public_id,
         url: resource.secure_url,
         guestName: guestName,
-        uploadedAt: resource.created_at
+        uploadedAt: resource.created_at,
+        isVideo: resource.resource_type === 'video' // Identify videos
       };
     });
 
@@ -68,19 +70,22 @@ app.get('/photos', async (req, res) => {
   }
 });
 
-// --- ENDPOINT: UPLOAD PHOTO ---
+// --- ENDPOINT: UPLOAD PHOTO OR VIDEO ---
 app.post('/upload', upload.single('photo'), async (req, res) => {
   console.log("Received upload request...");
   const guestName = req.body.guestName || "Anonymous";
   const filePath = req.file.path;
   
   try {
+    // Determine if file is a video based on mimetype
+    const isVideo = req.file.mimetype.startsWith('video/');
+    
     // Upload to Cloudinary
     const result = await cloudinary.uploader.upload(filePath, {
       folder: 'wedding-album', // Organize in folder
       tags: ['wedding-album'], // Tag for easy retrieval
       context: `guestName=${guestName}`, // Store guest name as metadata
-      resource_type: 'image'
+      resource_type: isVideo ? 'video' : 'image' // Specify resource type
     });
 
     console.log(`Success! Uploaded to Cloudinary: ${result.public_id}`);
@@ -91,7 +96,8 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
     res.status(200).json({ 
       success: true, 
       fileId: result.public_id,
-      url: result.secure_url
+      url: result.secure_url,
+      isVideo: isVideo
     });
 
   } catch (error) {
@@ -104,16 +110,21 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
   }
 });
 
-// --- ENDPOINT: DELETE PHOTO (Admin) ---
+// --- ENDPOINT: DELETE PHOTO OR VIDEO (Admin) ---
 app.delete('/photos/:id', async (req, res) => {
   try {
     // FIX: Decode the URL-encoded photo ID
     const publicId = decodeURIComponent(req.params.id);
     
-    console.log("Attempting to delete photo with ID:", publicId);
+    console.log("Attempting to delete media with ID:", publicId);
     
-    // Delete from Cloudinary
-    const result = await cloudinary.uploader.destroy(publicId);
+    // Try deleting as image first, then as video if that fails
+    let result = await cloudinary.uploader.destroy(publicId);
+    
+    if (result.result === 'not found') {
+      // If not found as image, try as video
+      result = await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+    }
     
     console.log("Cloudinary delete result:", result);
     
@@ -131,13 +142,14 @@ app.delete('/photos/:id', async (req, res) => {
 // --- ENDPOINT: DOWNLOAD ALL AS ZIP (Admin) ---
 app.get('/download-all', async (req, res) => {
   try {
-    // Fetch all photos
+    // Fetch all photos and videos
     const result = await cloudinary.api.resources_by_tag('wedding-album', {
-      max_results: 500
+      max_results: 500,
+      resource_type: 'auto' // Get both images and videos
     });
 
     if (result.resources.length === 0) {
-      return res.status(404).send("No photos to download");
+      return res.status(404).send("No media to download");
     }
 
     // Set headers for zip download
@@ -145,15 +157,19 @@ app.get('/download-all', async (req, res) => {
     const archive = archiver('zip', { zlib: { level: 9 } });
     archive.pipe(res);
 
-    // Download each image and add to zip
+    // Download each file and add to zip
     const https = require('https');
     const downloadPromises = result.resources.map((resource, index) => {
       return new Promise((resolve, reject) => {
-        https.get(resource.secure_url, (imageStream) => {
-          const fileName = `photo_${index + 1}.jpg`;
-          archive.append(imageStream, { name: fileName });
-          imageStream.on('end', resolve);
-          imageStream.on('error', reject);
+        https.get(resource.secure_url, (stream) => {
+          // Determine file extension based on resource type
+          const isVideo = resource.resource_type === 'video';
+          const ext = isVideo ? '.mp4' : '.jpg';
+          const fileName = `${isVideo ? 'video' : 'photo'}_${index + 1}${ext}`;
+          
+          archive.append(stream, { name: fileName });
+          stream.on('end', resolve);
+          stream.on('error', reject);
         }).on('error', reject);
       });
     });
