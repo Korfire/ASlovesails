@@ -73,19 +73,21 @@ app.get('/photos', async (req, res) => {
 // --- ENDPOINT: UPLOAD PHOTO OR VIDEO ---
 app.post('/upload', upload.single('photo'), async (req, res) => {
   console.log("Received upload request...");
+  console.log("File details:", req.file);
   const guestName = req.body.guestName || "Anonymous";
   const filePath = req.file.path;
   
   try {
     // Determine if file is a video based on mimetype
     const isVideo = req.file.mimetype.startsWith('video/');
+    console.log(`File type detected: ${isVideo ? 'video' : 'image'} (mimetype: ${req.file.mimetype})`);
     
-    // Upload to Cloudinary
+    // Upload to Cloudinary with auto resource type detection
     const result = await cloudinary.uploader.upload(filePath, {
       folder: 'wedding-album', // Organize in folder
       tags: ['wedding-album'], // Tag for easy retrieval
       context: `guestName=${guestName}`, // Store guest name as metadata
-      resource_type: isVideo ? 'video' : 'image' // Specify resource type
+      resource_type: 'auto' // Let Cloudinary auto-detect the type
     });
 
     console.log(`Success! Uploaded to Cloudinary: ${result.public_id}`);
@@ -97,11 +99,12 @@ app.post('/upload', upload.single('photo'), async (req, res) => {
       success: true, 
       fileId: result.public_id,
       url: result.secure_url,
-      isVideo: isVideo
+      isVideo: result.resource_type === 'video'
     });
 
   } catch (error) {
     console.error("Error uploading:", error);
+    console.error("Full error details:", JSON.stringify(error, null, 2));
     // Cleanup local file even on error
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
