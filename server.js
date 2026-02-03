@@ -40,32 +40,70 @@ let photosDB = [];
 // --- ENDPOINT: FETCH ALL PHOTOS AND VIDEOS ---
 app.get('/photos', async (req, res) => {
   try {
-    // Fetch all media from Cloudinary with tag 'wedding-album'
-    const result = await cloudinary.api.resources_by_tag('wedding-album', {
-      max_results: 500,
-      context: true, // Get custom context (guest name)
-      resource_type: 'auto' // Get both images and videos
-    });
+    let allMedia = [];
+    
+    // Fetch images
+    try {
+      const imagesResult = await cloudinary.api.resources_by_tag('wedding-album', {
+        max_results: 500,
+        context: true, // Get custom context (guest name)
+        resource_type: 'image'
+      });
 
-    // Map Cloudinary resources to our format
-    const photos = result.resources.map(resource => {
-      const guestName = resource.context?.custom?.guestName || 'Guest';
+      // Map images to our format
+      const images = imagesResult.resources.map(resource => {
+        const guestName = resource.context?.custom?.guestName || 'Guest';
+        
+        return {
+          id: resource.public_id,
+          url: resource.secure_url,
+          guestName: guestName,
+          uploadedAt: resource.created_at,
+          isVideo: false
+        };
+      });
       
-      return {
-        id: resource.public_id,
-        url: resource.secure_url,
-        guestName: guestName,
-        uploadedAt: resource.created_at,
-        isVideo: resource.resource_type === 'video' // Identify videos
-      };
-    });
+      allMedia = allMedia.concat(images);
+      console.log(`Fetched ${images.length} images`);
+    } catch (imgError) {
+      console.log("No images found or error fetching images:", imgError.message);
+    }
+
+    // Fetch videos
+    try {
+      const videosResult = await cloudinary.api.resources_by_tag('wedding-album', {
+        max_results: 500,
+        context: true, // Get custom context (guest name)
+        resource_type: 'video'
+      });
+
+      // Map videos to our format
+      const videos = videosResult.resources.map(resource => {
+        const guestName = resource.context?.custom?.guestName || 'Guest';
+        
+        return {
+          id: resource.public_id,
+          url: resource.secure_url,
+          guestName: guestName,
+          uploadedAt: resource.created_at,
+          isVideo: true
+        };
+      });
+      
+      allMedia = allMedia.concat(videos);
+      console.log(`Fetched ${videos.length} videos`);
+    } catch (vidError) {
+      console.log("No videos found or error fetching videos:", vidError.message);
+    }
 
     // Sort by newest first
-    photos.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
+    allMedia.sort((a, b) => new Date(b.uploadedAt) - new Date(a.uploadedAt));
     
-    res.json(photos);
+    console.log(`Total media items: ${allMedia.length}`);
+    res.json(allMedia);
   } catch (error) {
     console.error("Error fetching gallery:", error);
+    console.error("Full error details:", JSON.stringify(error, null, 2));
     res.status(500).json({ error: "Could not load gallery", details: error.message });
   }
 });
@@ -145,13 +183,31 @@ app.delete('/photos/:id', async (req, res) => {
 // --- ENDPOINT: DOWNLOAD ALL AS ZIP (Admin) ---
 app.get('/download-all', async (req, res) => {
   try {
-    // Fetch all photos and videos
-    const result = await cloudinary.api.resources_by_tag('wedding-album', {
-      max_results: 500,
-      resource_type: 'auto' // Get both images and videos
-    });
+    let allMedia = [];
+    
+    // Fetch all images
+    try {
+      const imagesResult = await cloudinary.api.resources_by_tag('wedding-album', {
+        max_results: 500,
+        resource_type: 'image'
+      });
+      allMedia = allMedia.concat(imagesResult.resources);
+    } catch (e) {
+      console.log("No images to download");
+    }
+    
+    // Fetch all videos
+    try {
+      const videosResult = await cloudinary.api.resources_by_tag('wedding-album', {
+        max_results: 500,
+        resource_type: 'video'
+      });
+      allMedia = allMedia.concat(videosResult.resources);
+    } catch (e) {
+      console.log("No videos to download");
+    }
 
-    if (result.resources.length === 0) {
+    if (allMedia.length === 0) {
       return res.status(404).send("No media to download");
     }
 
@@ -162,7 +218,7 @@ app.get('/download-all', async (req, res) => {
 
     // Download each file and add to zip
     const https = require('https');
-    const downloadPromises = result.resources.map((resource, index) => {
+    const downloadPromises = allMedia.map((resource, index) => {
       return new Promise((resolve, reject) => {
         https.get(resource.secure_url, (stream) => {
           // Determine file extension based on resource type
@@ -187,6 +243,6 @@ app.get('/download-all', async (req, res) => {
   }
 });
 
-// Start Server on Port 5000
+// Start Server on Port 10000
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`✅ Backend Server Running on ${PORT}`));
